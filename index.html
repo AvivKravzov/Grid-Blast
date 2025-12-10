@@ -30,7 +30,7 @@
             margin: 0;
             padding-top: 20px;
             color: var(--font-color);
-            min-height: 100vh; /* מונע גלילה מיותרת בגובה */
+            min-height: 100vh;
         }
 
         h1 {
@@ -67,7 +67,7 @@
             display: grid;
             grid-template-columns: repeat(9, 1fr);
             grid-template-rows: repeat(9, 1fr);
-            width: 450px; /* גודל קבוע למחשב */
+            width: 450px;
             height: 450px;
             border: 8px solid #333;
             background-color: var(--board-bg);
@@ -77,7 +77,7 @@
         }
 
         .cell {
-            width: 50px; /* גודל תא קבוע למחשב */
+            width: 50px;
             height: 50px;
             border: 1px solid #ccc;
             box-sizing: border-box;
@@ -110,7 +110,7 @@
             background-color: #ffffff;
             border-radius: 15px;
             box-shadow: var(--shadow-deep);
-            margin-bottom: 30px; /* רווח למטה */
+            margin-bottom: 30px;
         }
 
         .block-option {
@@ -127,7 +127,7 @@
         .block-option:hover:not(.used), .block-option.selected {
              transform: translateY(-3px);
              box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
-             background-color: #FFE0B2; /* הדגשה כשהבלוק נבחר/מרחף */
+             background-color: #FFE0B2;
         }
 
         .block-option:active {
@@ -144,15 +144,24 @@
         }
         
         .block-cell {
-            width: 20px; /* גודל תא בלוק בסיסי */
+            width: 20px;
             height: 20px;
             box-sizing: border-box;
             border-radius: 3px;
         }
         
+        /* --- Floating Block (Touch Drag) --- */
+        #floating-block {
+            position: absolute; /* מאפשר תנועה חופשית מעל הכל */
+            pointer-events: none; /* קריטי! מאפשר ללחוץ דרכו על הלוח */
+            z-index: 9999;
+            opacity: 0.8;
+            display: none; /* נסתר עד תחילת הגרירה */
+            transition: none; /* מבטל את הטרנזישן בזמן תנועה */
+        }
+        
         /* --- Game Over Message --- */
         #message-overlay {
-            /* ... (הקוד של Game Over נשאר זהה) ... */
             position: fixed;
             top: 0;
             left: 0;
@@ -211,9 +220,9 @@
             
             /* התאמת גודל הלוח לגודל יחסי של המסך */
             #game-container {
-                width: 90vw; /* 90% מרוחב המכשיר */
+                width: 90vw; 
                 height: 90vw;
-                max-width: 450px; /* מגביל אם המסך רחב מדי */
+                max-width: 450px; 
                 border-width: 4px;
             }
             
@@ -263,6 +272,8 @@
     <h2>Next Blocks</h2>
     <div id="next-blocks-container">
         </div>
+    
+    <div id="floating-block" style="display: none;"></div> 
 
     <div id="message-overlay">
         <h2>Game Over!</h2>
@@ -280,13 +291,15 @@
         const scoreDisplay = document.getElementById('score');
         const highScoreDisplay = document.getElementById('high-score');
         const messageOverlay = document.getElementById('message-overlay');
+        const floatingBlock = document.getElementById('floating-block'); // האלמנט החדש
         
         let board = Array(ROWS).fill(0).map(() => Array(COLS).fill(0));
         let score = 0;
         let highScore = 0;
         let nextBlocks = [];
-        let selectedBlockData = null; // שימש בעבר כ-draggedBlockData
-        let selectedBlockIndex = -1;  // שימש בעבר כ-draggedBlockIndex
+        let selectedBlockData = null; 
+        let selectedBlockIndex = -1;  
+        let isTouchDragging = false; // משתנה לניהול מצב גרירה במגע
 
         // --- 2. Block Templates and Data (נותר זהה) ---
         const ALL_BLOCK_TEMPLATES = [
@@ -347,7 +360,7 @@
             };
         }
 
-        // --- 4. Next Blocks Logic & Selection Events (חדש: בחירה במקום גרירה) ---
+        // --- 4. Next Blocks Logic & Selection Events ---
 
         function generateNextBlocks() {
             nextBlocks = [];
@@ -358,6 +371,28 @@
             checkGameOver();
         }
 
+        function createBlockVisual(blockData) {
+            const gridDiv = document.createElement('div');
+            gridDiv.classList.add('block-grid');
+            
+            const numCols = blockData.shape.length > 0 && blockData.shape[0].length > 0 ? blockData.shape[0].length : 1; 
+            gridDiv.style.gridTemplateColumns = `repeat(${numCols}, 1fr)`;
+            
+            blockData.shape.forEach(row => {
+                row.forEach(cellValue => {
+                    const blockCell = document.createElement('div');
+                    blockCell.classList.add('block-cell');
+                    if (cellValue === 1) {
+                        blockCell.style.backgroundColor = blockData.color;
+                        blockCell.style.border = '1px solid #333';
+                    }
+                    gridDiv.appendChild(blockCell);
+                });
+            });
+            return gridDiv;
+        }
+
+
         function renderNextBlocks() {
             nextBlocksContainer.innerHTML = '';
             nextBlocks.forEach((block, index) => {
@@ -366,106 +401,142 @@
                 if (block.isUsed) {
                     optionDiv.classList.add('used');
                 }
-                // אם הבלוק הנוכחי הוא הבלוק שנבחר כרגע, הדגש אותו
-                if (index === selectedBlockIndex && !block.isUsed) {
-                    optionDiv.classList.add('selected');
-                }
+                
                 optionDiv.dataset.blockIndex = index;
 
-                const gridDiv = document.createElement('div');
-                gridDiv.classList.add('block-grid');
-                
-                const numCols = block.shape.length > 0 && block.shape[0].length > 0 ? block.shape[0].length : 1; 
-                gridDiv.style.gridTemplateColumns = `repeat(${numCols}, 1fr)`;
-                
-                block.shape.forEach(row => {
-                    row.forEach(cellValue => {
-                        const blockCell = document.createElement('div');
-                        blockCell.classList.add('block-cell');
-                        if (cellValue === 1) {
-                            blockCell.style.backgroundColor = block.color;
-                            blockCell.style.border = '1px solid #333';
-                        }
-                        gridDiv.appendChild(blockCell);
-                    });
-                });
-
+                const gridDiv = createBlockVisual(block);
                 optionDiv.appendChild(gridDiv);
                 
-                // --- מאזינים חדשים: לחיצה רגילה ולחיצה לשימוש ---
-                optionDiv.addEventListener('click', handleBlockSelection); 
-                
-                // הוספת מאזיני גרירה רק עבור המחשב
-                if (window.innerWidth > 600) { // מזהה מחשבים
+                // --- מאזינים: גרירת עכבר למחשב ---
+                if (window.innerWidth > 600) { 
                     optionDiv.draggable = true;
                     optionDiv.addEventListener('dragstart', handleDragStart);
                     optionDiv.addEventListener('dragend', handleSelectionEnd);
+                } else {
+                    // --- מאזינים: גרירת מגע לטלפון ---
+                    optionDiv.addEventListener('touchstart', handleTouchStart);
                 }
                 
                 nextBlocksContainer.appendChild(optionDiv);
             });
+
+            // מוודא שמאזיני ה-dragover קיימים רק במחשב
+            gameContainer.querySelectorAll('.cell').forEach(cell => {
+                if (window.innerWidth > 600) {
+                    cell.addEventListener('dragover', handleDragOver);
+                    cell.addEventListener('dragleave', handleDragLeave);
+                    cell.addEventListener('drop', handleDrop);
+                }
+            });
+        }
+        
+        
+        // --- פונקציות גרירת מגע (Touch Drag) ---
+
+        function handleTouchStart(event) {
+            const isMobile = window.innerWidth <= 600;
+            if (!isMobile) return;
+
+            // מונע גלילת מסך תוך כדי גרירה
+            event.preventDefault(); 
             
-            // אם יש בלוק שנבחר, הוסף מאזינים ללוח עבור הקליק השני
-            if (selectedBlockData) {
-                 gameContainer.querySelectorAll('.cell').forEach(cell => {
-                    cell.addEventListener('click', handleBoardPlacement);
-                    
-                    // הוספת מאזיני גרירה רק עבור המחשב
-                    if (window.innerWidth > 600) {
-                        cell.addEventListener('dragover', handleDragOver);
-                        cell.addEventListener('dragleave', handleDragLeave);
-                        cell.addEventListener('drop', handleDrop);
-                    }
-                });
-            } else {
-                 gameContainer.querySelectorAll('.cell').forEach(cell => {
-                    cell.removeEventListener('click', handleBoardPlacement);
-                });
+            isTouchDragging = true;
+            
+            const targetBlockOption = event.currentTarget;
+            const index = parseInt(targetBlockOption.dataset.blockIndex);
+            
+            selectedBlockData = nextBlocks[index];
+            selectedBlockIndex = index;
+            
+            // יצירת האלמנט הצף
+            floatingBlock.innerHTML = '';
+            const blockVisual = createBlockVisual(selectedBlockData);
+            floatingBlock.appendChild(blockVisual);
+            floatingBlock.style.display = 'block';
+
+            // מכין את הבלוק הצף למיקום ההתחלתי
+            const touch = event.touches[0];
+            updateFloatingBlockPosition(touch.clientX, touch.clientY);
+            
+            // מוסיף מאזינים גלובליים לתנועה ושחרור
+            document.addEventListener('touchmove', handleTouchMove);
+            document.addEventListener('touchend', handleTouchEnd);
+            
+            targetBlockOption.style.opacity = '0.2'; // "מרוקן" את הבלוק המקורי
+        }
+        
+        function handleTouchMove(event) {
+            if (!isTouchDragging) return;
+            event.preventDefault(); // מונע גלילה נוספת
+            
+            const touch = event.touches[0];
+            updateFloatingBlockPosition(touch.clientX, touch.clientY);
+
+            // בדיקת מיקום הבלוק על הלוח
+            const cellUnderTouch = getCellElementFromCoords(touch.clientX, touch.clientY);
+            gameContainer.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight')); // ניקוי קודם
+
+            if (cellUnderTouch) {
+                const row = parseInt(cellUnderTouch.dataset.row);
+                const col = parseInt(cellUnderTouch.dataset.col);
+                
+                if (canPlaceBlock(row, col, selectedBlockData)) {
+                    highlightBlockArea(row, col, selectedBlockData, true);
+                } else {
+                    highlightBlockArea(row, col, selectedBlockData, false, true);
+                }
             }
         }
         
-        // --- פונקציה לבחירת בלוק (קליק ראשון בטלפון) ---
-        function handleBlockSelection(event) {
-            const index = parseInt(event.currentTarget.dataset.blockIndex);
+        function handleTouchEnd(event) {
+            if (!isTouchDragging) return;
             
-            // אם הבלוק כבר נבחר, בטל את הבחירה
-            if (selectedBlockIndex === index) {
-                selectedBlockData = null;
-                selectedBlockIndex = -1;
-            } else {
-                selectedBlockData = nextBlocks[index];
-                selectedBlockIndex = index;
+            document.removeEventListener('touchmove', handleTouchMove);
+            document.removeEventListener('touchend', handleTouchEnd);
+            
+            // הסתרת האלמנט הצף
+            floatingBlock.style.display = 'none';
+            isTouchDragging = false;
+            
+            // קבלת הקואורדינטות של שחרור המגע (הנקודה האחרונה שהאצבע הייתה בה)
+            const lastTouch = event.changedTouches[0];
+            
+            const cellUnderTouch = getCellElementFromCoords(lastTouch.clientX, lastTouch.clientY);
+            
+            if (cellUnderTouch) {
+                const row = parseInt(cellUnderTouch.dataset.row);
+                const col = parseInt(cellUnderTouch.dataset.col);
+
+                if (placeBlock(row, col, selectedBlockData)) {
+                    nextBlocks[selectedBlockIndex].isUsed = true;
+                    checkIfAllUsed();
+                } 
             }
             
-            // ניקוי הדגשות קודמות
-            gameContainer.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
-            
-            renderNextBlocks(); // רנדור מחדש להדגשת הבלוק הנבחר ועדכון מאזיני הלוח
+            // ניקוי ובדיקה
+            handleSelectionEnd();
         }
         
-        // --- פונקציה להצבת בלוק על הלוח (קליק שני בטלפון) ---
-        function handleBoardPlacement(event) {
-            if (!selectedBlockData) return;
+        // פונקציית עזר למיקום הבלוק הצף
+        function updateFloatingBlockPosition(x, y) {
+            // ממקם את הבלוק הצף במרכז המגע
+            floatingBlock.style.left = `${x - floatingBlock.offsetWidth / 2}px`;
+            floatingBlock.style.top = `${y - floatingBlock.offsetHeight / 2}px`;
+        }
+
+        // פונקציית עזר לקבלת האלמנט מתחת לנקודת המגע
+        function getCellElementFromCoords(x, y) {
+            // משתמש ב-elementFromPoint כדי למצוא את האלמנט שנמצא בנקודה (x, y)
+            const element = document.elementFromPoint(x, y);
             
-            const cell = event.currentTarget;
-            const row = parseInt(cell.dataset.row);
-            const col = parseInt(cell.dataset.col);
-            
-            if (placeBlock(row, col, selectedBlockData)) {
-                nextBlocks[selectedBlockIndex].isUsed = true;
-                selectedBlockData = null; // איפוס
-                selectedBlockIndex = -1; // איפוס
-                renderNextBlocks();
-                checkIfAllUsed();
-            } else {
-                // אם אי אפשר להניח, פשוט בטל את הבחירה (כדי לא ללחוץ שוב בטעות)
-                selectedBlockData = null; 
-                selectedBlockIndex = -1;
-                renderNextBlocks();
+            // מחזיר רק אם האלמנט הוא תא בלוח המשחק
+            if (element && element.classList.contains('cell')) {
+                return element;
             }
+            return null;
         }
-        
-        // --- הוספת מאזיני גרירה רק למחשב (שם מתאימים) ---
+
+        // --- פונקציות גרירת עכבר (Drag & Drop) למחשב ---
 
         function handleDragStart(event) {
             const index = parseInt(event.currentTarget.dataset.blockIndex);
@@ -476,11 +547,11 @@
         }
 
         function handleSelectionEnd() {
-            // נקרא גם בסוף גרירה במחשב
+            // נקרא בסוף גרירת עכבר או מגע
             selectedBlockData = null;
             selectedBlockIndex = -1;
             gameContainer.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
-            renderNextBlocks();
+            renderNextBlocks(); // רנדור מחדש כדי להחזיר את שקיפות הבלוק המקורי
         }
 
         function handleDragOver(event) {
@@ -491,13 +562,12 @@
             const row = parseInt(cell.dataset.row);
             const col = parseInt(cell.dataset.col);
             
-            // טיפול בהדגשה (נותר זהה, רק השתמש ב-selectedBlockData)
             if (canPlaceBlock(row, col, selectedBlockData)) {
                 event.dataTransfer.dropEffect = 'move';
                 highlightBlockArea(row, col, selectedBlockData, true);
             } else {
                 event.dataTransfer.dropEffect = 'none';
-                highlightBlockArea(row, col, selectedBlockData, false);
+                highlightBlockArea(row, col, selectedBlockData, false, true);
             }
         }
 
@@ -543,7 +613,6 @@
             
             if (placeBlock(row, col, selectedBlockData)) {
                 nextBlocks[selectedBlockIndex].isUsed = true;
-                // handleSelectionEnd יאפס את הבלוק הנבחר וירנדר מחדש
                 handleSelectionEnd(); 
                 checkIfAllUsed();
             } else {
@@ -552,7 +621,7 @@
         }
 
 
-        // --- 5. Placing Blocks and Fit Check (נותר זהה, רק משתמש ב-selectedBlockData) ---
+        // --- 5. Placing Blocks and Fit Check (נותר זהה) ---
 
         function canPlaceBlock(startRow, startCol, blockData) {
             const shape = blockData.shape;
@@ -721,8 +790,8 @@
             createBoard();
             generateNextBlocks();
             
-            selectedBlockData = null; // ודא איפוס
-            selectedBlockIndex = -1; // ודא איפוס
+            selectedBlockData = null; 
+            selectedBlockIndex = -1; 
         }
 
         initGame();
