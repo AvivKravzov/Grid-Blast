@@ -30,6 +30,7 @@
             margin: 0;
             padding-top: 20px;
             color: var(--font-color);
+            min-height: 100vh; /* מונע גלילה מיותרת בגובה */
         }
 
         h1 {
@@ -61,11 +62,12 @@
             color: var(--secondary-color);
         }
 
+        /* --- הגדרות הלוח והתאים (ברירת מחדל: מחשב) --- */
         #game-container {
             display: grid;
             grid-template-columns: repeat(9, 1fr);
             grid-template-rows: repeat(9, 1fr);
-            width: 450px;
+            width: 450px; /* גודל קבוע למחשב */
             height: 450px;
             border: 8px solid #333;
             background-color: var(--board-bg);
@@ -75,7 +77,7 @@
         }
 
         .cell {
-            width: 50px;
+            width: 50px; /* גודל תא קבוע למחשב */
             height: 50px;
             border: 1px solid #ccc;
             box-sizing: border-box;
@@ -108,6 +110,7 @@
             background-color: #ffffff;
             border-radius: 15px;
             box-shadow: var(--shadow-deep);
+            margin-bottom: 30px; /* רווח למטה */
         }
 
         .block-option {
@@ -117,13 +120,14 @@
             background-color: #f0f0f0;
             border-radius: 8px;
             box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
-            transition: transform 0.1s, opacity 0.2s;
+            transition: transform 0.1s, opacity 0.2s, background-color 0.2s;
             user-select: none;
         }
         
-        .block-option:hover:not(.used) {
+        .block-option:hover:not(.used), .block-option.selected {
              transform: translateY(-3px);
              box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+             background-color: #FFE0B2; /* הדגשה כשהבלוק נבחר/מרחף */
         }
 
         .block-option:active {
@@ -140,7 +144,7 @@
         }
         
         .block-cell {
-            width: 20px;
+            width: 20px; /* גודל תא בלוק בסיסי */
             height: 20px;
             box-sizing: border-box;
             border-radius: 3px;
@@ -148,6 +152,7 @@
         
         /* --- Game Over Message --- */
         #message-overlay {
+            /* ... (הקוד של Game Over נשאר זהה) ... */
             position: fixed;
             top: 0;
             left: 0;
@@ -195,6 +200,53 @@
             background-color: #45a049;
             transform: translateY(-2px);
         }
+        
+        /* --- מדיה קוורי: התאמה למסכים קטנים (טלפונים) --- */
+        @media (max-width: 600px) {
+            
+            h1 {
+                font-size: 1.8em;
+                margin-bottom: 20px;
+            }
+            
+            /* התאמת גודל הלוח לגודל יחסי של המסך */
+            #game-container {
+                width: 90vw; /* 90% מרוחב המכשיר */
+                height: 90vw;
+                max-width: 450px; /* מגביל אם המסך רחב מדי */
+                border-width: 4px;
+            }
+            
+            /* ביטול גודל קבוע לתאים כדי שיתאימו ל-90vw */
+            .cell {
+                width: auto; 
+                height: auto;
+            }
+
+            #stats-container {
+                gap: 15px;
+            }
+
+            #score-container, #high-score-container {
+                font-size: 1.1em;
+                padding: 8px 15px;
+            }
+
+            /* הקטנת גודל הבלוקים הבאים */
+            .block-cell {
+                width: 15px;
+                height: 15px;
+            }
+
+            #next-blocks-container {
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .block-option {
+                 padding: 5px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -220,9 +272,7 @@
     </div>
 
     <script>
-        // *** JavaScript logic remains the same (Drag & Drop, Rotation, Game Over Check) ***
-
-        // Board Settings
+        // --- 1. הגדרות ומשתנים גלובליים ---
         const ROWS = 9;
         const COLS = 9;
         const gameContainer = document.getElementById('game-container');
@@ -235,10 +285,10 @@
         let score = 0;
         let highScore = 0;
         let nextBlocks = [];
-        let draggedBlockData = null;
-        let draggedBlockIndex = -1;
+        let selectedBlockData = null; // שימש בעבר כ-draggedBlockData
+        let selectedBlockIndex = -1;  // שימש בעבר כ-draggedBlockIndex
 
-        // --- 1. Block Templates and Data ---
+        // --- 2. Block Templates and Data (נותר זהה) ---
         const ALL_BLOCK_TEMPLATES = [
             { id: 1, shape: [[1]], color: '#FF5733', points: 1 },
             { id: 2, shape: [[1, 1]], color: '#33FF57', points: 2 },
@@ -251,13 +301,12 @@
             { id: 10, shape: [[1, 1, 1], [1, 1, 1], [1, 1, 1]], color: '#556B2F', points: 9 }
         ];
 
-        // --- Matrix Rotation Function (90 degrees clockwise) ---
+        // --- 3. Matrix Rotation, Scoring, High Score, Get Random Block (נותר זהה) ---
+
         function rotateMatrix(matrix) {
             const rows = matrix.length;
             const cols = matrix[0].length;
-            
             const rotated = Array(cols).fill(0).map(() => Array(rows).fill(0));
-            
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
                     rotated[c][rows - 1 - r] = matrix[r][c];
@@ -265,8 +314,6 @@
             }
             return rotated;
         }
-
-        // --- Scoring and High Score ---
 
         function loadHighScore() {
             const storedScore = localStorage.getItem('blockBlastHighScore');
@@ -287,14 +334,11 @@
         function getRandomBlock() {
             const randomIndex = Math.floor(Math.random() * ALL_BLOCK_TEMPLATES.length);
             let block = ALL_BLOCK_TEMPLATES[randomIndex];
-
             const rotations = Math.floor(Math.random() * 4); 
-
             let rotatedShape = block.shape;
             for (let i = 0; i < rotations; i++) {
                 rotatedShape = rotateMatrix(rotatedShape);
             }
-
             return { 
                 id: block.id, 
                 shape: rotatedShape, 
@@ -303,7 +347,7 @@
             };
         }
 
-        // --- 2. Next Blocks Logic & Drag & Drop ---
+        // --- 4. Next Blocks Logic & Selection Events (חדש: בחירה במקום גרירה) ---
 
         function generateNextBlocks() {
             nextBlocks = [];
@@ -321,6 +365,10 @@
                 optionDiv.classList.add('block-option');
                 if (block.isUsed) {
                     optionDiv.classList.add('used');
+                }
+                // אם הבלוק הנוכחי הוא הבלוק שנבחר כרגע, הדגש אותו
+                if (index === selectedBlockIndex && !block.isUsed) {
+                    optionDiv.classList.add('selected');
                 }
                 optionDiv.dataset.blockIndex = index;
 
@@ -344,66 +392,119 @@
 
                 optionDiv.appendChild(gridDiv);
                 
-                optionDiv.draggable = true;
-                optionDiv.addEventListener('dragstart', handleDragStart);
-                optionDiv.addEventListener('dragend', handleDragEnd);
+                // --- מאזינים חדשים: לחיצה רגילה ולחיצה לשימוש ---
+                optionDiv.addEventListener('click', handleBlockSelection); 
+                
+                // הוספת מאזיני גרירה רק עבור המחשב
+                if (window.innerWidth > 600) { // מזהה מחשבים
+                    optionDiv.draggable = true;
+                    optionDiv.addEventListener('dragstart', handleDragStart);
+                    optionDiv.addEventListener('dragend', handleSelectionEnd);
+                }
                 
                 nextBlocksContainer.appendChild(optionDiv);
             });
+            
+            // אם יש בלוק שנבחר, הוסף מאזינים ללוח עבור הקליק השני
+            if (selectedBlockData) {
+                 gameContainer.querySelectorAll('.cell').forEach(cell => {
+                    cell.addEventListener('click', handleBoardPlacement);
+                    
+                    // הוספת מאזיני גרירה רק עבור המחשב
+                    if (window.innerWidth > 600) {
+                        cell.addEventListener('dragover', handleDragOver);
+                        cell.addEventListener('dragleave', handleDragLeave);
+                        cell.addEventListener('drop', handleDrop);
+                    }
+                });
+            } else {
+                 gameContainer.querySelectorAll('.cell').forEach(cell => {
+                    cell.removeEventListener('click', handleBoardPlacement);
+                });
+            }
         }
-
-        // --- Drag and Drop Handlers ---
+        
+        // --- פונקציה לבחירת בלוק (קליק ראשון בטלפון) ---
+        function handleBlockSelection(event) {
+            const index = parseInt(event.currentTarget.dataset.blockIndex);
+            
+            // אם הבלוק כבר נבחר, בטל את הבחירה
+            if (selectedBlockIndex === index) {
+                selectedBlockData = null;
+                selectedBlockIndex = -1;
+            } else {
+                selectedBlockData = nextBlocks[index];
+                selectedBlockIndex = index;
+            }
+            
+            // ניקוי הדגשות קודמות
+            gameContainer.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
+            
+            renderNextBlocks(); // רנדור מחדש להדגשת הבלוק הנבחר ועדכון מאזיני הלוח
+        }
+        
+        // --- פונקציה להצבת בלוק על הלוח (קליק שני בטלפון) ---
+        function handleBoardPlacement(event) {
+            if (!selectedBlockData) return;
+            
+            const cell = event.currentTarget;
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+            
+            if (placeBlock(row, col, selectedBlockData)) {
+                nextBlocks[selectedBlockIndex].isUsed = true;
+                selectedBlockData = null; // איפוס
+                selectedBlockIndex = -1; // איפוס
+                renderNextBlocks();
+                checkIfAllUsed();
+            } else {
+                // אם אי אפשר להניח, פשוט בטל את הבחירה (כדי לא ללחוץ שוב בטעות)
+                selectedBlockData = null; 
+                selectedBlockIndex = -1;
+                renderNextBlocks();
+            }
+        }
+        
+        // --- הוספת מאזיני גרירה רק למחשב (שם מתאימים) ---
 
         function handleDragStart(event) {
-            const index = parseInt(event.target.dataset.blockIndex);
-            draggedBlockData = nextBlocks[index];
-            draggedBlockIndex = index;
-            event.dataTransfer.setData('text/plain', JSON.stringify(draggedBlockData));
+            const index = parseInt(event.currentTarget.dataset.blockIndex);
+            selectedBlockData = nextBlocks[index];
+            selectedBlockIndex = index;
+            event.dataTransfer.setData('text/plain', JSON.stringify(selectedBlockData));
             event.dataTransfer.effectAllowed = 'move';
-            
-            const cells = gameContainer.querySelectorAll('.cell');
-            cells.forEach(cell => {
-                cell.addEventListener('dragover', handleDragOver);
-                cell.addEventListener('dragleave', handleDragLeave);
-                cell.addEventListener('drop', handleDrop);
-            });
         }
 
-        function handleDragEnd() {
-            draggedBlockData = null;
-            draggedBlockIndex = -1;
-            
-            const cells = gameContainer.querySelectorAll('.cell');
-            cells.forEach(cell => {
-                cell.classList.remove('highlight');
-                cell.removeEventListener('dragover', handleDragOver);
-                cell.removeEventListener('dragleave', handleDragLeave);
-                cell.removeEventListener('drop', handleDrop);
-            });
+        function handleSelectionEnd() {
+            // נקרא גם בסוף גרירה במחשב
+            selectedBlockData = null;
+            selectedBlockIndex = -1;
+            gameContainer.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
+            renderNextBlocks();
         }
 
         function handleDragOver(event) {
             event.preventDefault();
-            if (!draggedBlockData) return;
+            if (!selectedBlockData) return;
 
-            const cell = event.target;
+            const cell = event.currentTarget;
             const row = parseInt(cell.dataset.row);
             const col = parseInt(cell.dataset.col);
             
-            if (canPlaceBlock(row, col, draggedBlockData)) {
+            // טיפול בהדגשה (נותר זהה, רק השתמש ב-selectedBlockData)
+            if (canPlaceBlock(row, col, selectedBlockData)) {
                 event.dataTransfer.dropEffect = 'move';
-                highlightBlockArea(row, col, draggedBlockData, true);
+                highlightBlockArea(row, col, selectedBlockData, true);
             } else {
                 event.dataTransfer.dropEffect = 'none';
-                highlightBlockArea(row, col, draggedBlockData, false);
+                highlightBlockArea(row, col, selectedBlockData, false);
             }
         }
 
         function handleDragLeave(event) {
-             const cell = event.target;
-             const row = parseInt(cell.dataset.row);
-             const col = parseInt(cell.dataset.col);
-             highlightBlockArea(row, col, draggedBlockData, false, true); 
+             const row = parseInt(event.currentTarget.dataset.row);
+             const col = parseInt(event.currentTarget.dataset.col);
+             highlightBlockArea(row, col, selectedBlockData, false, true); 
         }
 
         function highlightBlockArea(startRow, startCol, blockData, highlight, clearOnly = false) {
@@ -434,20 +535,24 @@
         
         function handleDrop(event) {
             event.preventDefault();
-            if (!draggedBlockData) return;
+            if (!selectedBlockData) return;
             
-            const cell = event.target;
+            const cell = event.currentTarget;
             const row = parseInt(cell.dataset.row);
             const col = parseInt(cell.dataset.col);
             
-            if (placeBlock(row, col, draggedBlockData)) {
-                nextBlocks[draggedBlockIndex].isUsed = true;
-                renderNextBlocks();
+            if (placeBlock(row, col, selectedBlockData)) {
+                nextBlocks[selectedBlockIndex].isUsed = true;
+                // handleSelectionEnd יאפס את הבלוק הנבחר וירנדר מחדש
+                handleSelectionEnd(); 
                 checkIfAllUsed();
+            } else {
+                 handleSelectionEnd(); 
             }
         }
 
-        // --- 3. Placing Blocks and Fit Check ---
+
+        // --- 5. Placing Blocks and Fit Check (נותר זהה, רק משתמש ב-selectedBlockData) ---
 
         function canPlaceBlock(startRow, startCol, blockData) {
             const shape = blockData.shape;
@@ -508,7 +613,7 @@
             }
         }
 
-        // --- 4. Line Clearing and Game Over Logic ---
+        // --- 6. Line Clearing and Game Over Logic (נותר זהה) ---
 
         function checkAndClearLines() {
             let cellsToClear = [];
@@ -590,7 +695,7 @@
             messageOverlay.style.display = 'flex';
         }
 
-        // --- Initialization ---
+        // --- 7. Initialization ---
         
         function createBoard() {
             gameContainer.innerHTML = '';
@@ -615,11 +720,14 @@
             loadHighScore();
             createBoard();
             generateNextBlocks();
+            
+            selectedBlockData = null; // ודא איפוס
+            selectedBlockIndex = -1; // ודא איפוס
         }
 
         initGame();
         
-        // --- Registering Service Worker for PWA (Code added here) ---
+        // --- Registering Service Worker for PWA (נותר זהה) ---
         if ('serviceWorker' in navigator) {
           window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
